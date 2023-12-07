@@ -1,4 +1,5 @@
-import os
+#%%
+# import os
 import pandas as pd
 from .utils import *
 #*Data import functions
@@ -22,15 +23,18 @@ def import_rawdata(file_path: str) -> Optional[pd.DataFrame]:
     logging.info(f"Attempting to import raw data from {file_path}")
     if os.path.exists(file_path)==True:
         if file_path.endswith('.chi'):
-            df=pd.read_table(file_path,skiprows=4, names=["q","I"], sep="\s+")
+            df=pd.read_table(file_path,skiprows=4, names=["q","I"], sep=r"\s+")
+            if ',' in str(df.q.iloc[0]):
+                df=pd.read_table(file_path,skiprows=0, names=["q","I"], sep=",")
         elif file_path.endswith('.txt'):
-            df=pd.read_table(file_path,skiprows=1, names=["q","I"], sep="\s+")
+            df=pd.read_table(file_path,skiprows=1, names=["q","I"], sep=r"\s+")
             
         else:raise ValueError('File type unknown, please specify the type in function import_rawdata()')
         return df    
     
     else:raise FileNotFoundError(f'Could not find file: {file_path}')
 @log_function_call
+
 
 
 

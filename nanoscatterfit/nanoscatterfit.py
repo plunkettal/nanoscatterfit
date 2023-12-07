@@ -94,7 +94,7 @@ def auto_baseline_optimizer(y:pd.Series,
     Automatically optimizes the baseline of the diffractogram using the cost function defined in the cost_func function.
     It is important to specify the range of hyperparameters lam and p to search for the optimal baseline.
     Parameters:
-    - y : pd.Series
+    - y : pd.Seriesy
         Series containing the diffractogram data.
     - alpha : int, optional
         Weight of the term 1 in the cost function. Default is 2.
@@ -209,6 +209,7 @@ def fit_structurefactor(x:pd.Series,y:pd.Series,
                       max_sigma_diff:int=None,
                       q_range: Union[str,Tuple[float,float]] ='auto',
                       q111:Union[str,float] ='auto',
+                      min_q111:Union[float,None]=None
                       )->MinimizerResult:
     """fits the Structure factor with a model depending on the crystal structure
 
@@ -237,7 +238,12 @@ def fit_structurefactor(x:pd.Series,y:pd.Series,
         peaks=find_peaks(y, prominence=0.1)
         if len(peaks)==0:
             logging.info(f'found {len(peaks)} peaks in y {y}')
-        q111=x.iloc[peaks[0][0]]*0.985 #estimate for the first position of q
+        peaks=peaks[0]
+        if min_q111 is not None:
+            peaks=[p for p in peaks if x.iloc[p]>min_q111]
+        logging.info(f'maxima found at positions: {x.iloc[peaks]}')
+        q111=x.iloc[peaks[0]]*0.99 #estimate for the first position of q
+        
         logging.info(f'guess of the (111) peak position is q = {q111}')
     
     #determine max q depending on the amount of peaks to fit, adjust 
@@ -353,9 +359,12 @@ def get_structureinfo(out:MinimizerResult,
     - Tuple[float,float]
         lattice constant and domain size in nm
     """
-    a=2*3**0.5*np.pi/out.params["cen1"].value
-    fwhm=2*out.params["sigma1"].value*np.sqrt(2*np.log(2))
-    Dsize=2*np.pi/fwhm
+    if structure=='fcc':
+        a=2*3**0.5*np.pi/out.params["cen1"].value
+        fwhm=2*out.params["sigma1"].value*np.sqrt(2*np.log(2))
+        Dsize=2*np.pi/fwhm
+    else:
+        raise('unknown crystal structure given as input')
     return a, Dsize
 
 
@@ -374,7 +383,7 @@ def cubic_form_factor(q, R):
     return np.sinc(q * R)**2
 
 # Main scattering intensity function
-@log_function_call
+
 def formfactor(q, mu, sigma, C, y0,distribution, shape,distribution_type='volume' ):
     amp=1
     if distribution == 'lognormal':
@@ -410,11 +419,16 @@ def fit_formfactor(q_data, I_data,initial_params, distribution='lognormal', shap
     logging.info(f'fitting formfactor model to SAXS data...')
     #* fit the log is required to fit optimally over several orders of magnitude
     popt, pcov = curve_fit(lambda q,mu, sigma, C, y0:np.log(model(q,mu, sigma, C, y0)), q_data, np.log(I_data), p0=initial_params)
-    logging.info('fit successfull')
+    # calculate the R²
+    residuals=np.log(I_data) - np.log(model(q_data, *popt))
+    ss_res = np.sum(residuals**2)
+    ss_tot = np.sum((np.log(I_data)-np.mean(np.log(I_data)))**2)
+    r_squared = 1 - (ss_res / ss_tot)
+    logging.info(f'fit successfull with R²={r_squared:.3f}')
     if distribution=='normal':fitresult=f'mean size: {popt[0]:.2f} nm +/- {popt[1]*100:.1f} %'
     elif distribution=='lognormal':fitresult=f'mean size: {np.exp(np.log(popt[0])+popt[1]**2/2):.2f} nm, mode size: {np.exp(np.log(popt[0])-popt[1]**2):.2f} nm +/- {popt[1]*100:.1f} %'
     logging.info(fitresult)
-    return popt, pcov, fitresult
+    return popt, pcov,r_squared, fitresult
 @log_function_call 
 def plot_formmodel(q_data,  params, distribution='lognormal', shape='spherical', distribution_type='volume', ax=None, color='red',label=None):
     def model(q, mu, sigma, C, y0):
@@ -422,7 +436,7 @@ def plot_formmodel(q_data,  params, distribution='lognormal', shape='spherical',
         return formfactor(q,mu, sigma, C, y0,distribution, shape,distribution_type)
     if ax is None:
         fig, ax = plt.subplots()
-        ax.set_xlabel('Scattering vector, q ($\mathregular{nm^{-1}}$)')
+        ax.set_xlabel(r'Scattering vector, q ($\mathregular{nm^{-1}}$)')
         ax.set_ylabel('Intensity (a.u.)')
         ax.set_yscale('log')
     # ax.plot(q_data, I_data, 'o', label='data')
@@ -499,7 +513,7 @@ def plot(df: pd.DataFrame, x: str = 'q', y: str = 'I',
     # Set axis labels
     y_label_map = {'I': 'Intensity (a.u.)','F': 'Intensity (a.u.)', 'S': 'Structure Factor (a.u.)'}
     y_label = y_label_map.get(y, y)
-    ax.set_xlabel('Scattering vector ($\mathregular{nm^{-1}}$)')
+    ax.set_xlabel(r'Scattering vector ($\mathregular{nm^{-1}}$)')
     ax.set_ylabel(y_label)
 
     # Add legend if label is specified
@@ -573,3 +587,5 @@ def plot_structuremodel(x_array:np.array,out:MinimizerResult,
 if __name__=='__main__':
     pass
     
+
+

@@ -2,11 +2,11 @@ import pandas as pd
 import os
 from typing import Tuple, Optional,Dict,Any,List
 from scipy import integrate
-
+from scipy.signal import find_peaks
 import logging
 logging.basicConfig(
     level=logging.INFO,
-    filename='analysis.log',
+    filename='nanoscatterfit.log',
     filemode='w',
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
@@ -41,7 +41,7 @@ def log_function_call(func):
     return wrapper
 
 
-def delete_log_file(file_path: str) -> None:
+def delete_log_file(file_path: str='nanoscatterfit.log') -> None:
     """
     Deletes the specified log file.
 
@@ -52,9 +52,13 @@ def delete_log_file(file_path: str) -> None:
     Returns:
     - None
     """
-    logging.shutdown()
+    # logging.shutdown()
     try:
-        os.remove(file_path)
+        
+        with open(file_path, 'w') as f:
+            #rewrite the content of the log file with the empty sting
+            f.write('')
+            f.close()
         print(f"Log file {file_path} has been deleted.")
     except FileNotFoundError:
         print(f"File {file_path} not found.")
@@ -62,7 +66,6 @@ def delete_log_file(file_path: str) -> None:
         print(f"Permission denied. Could not delete file {file_path}.")
     except Exception as e:
         print(f"An error occurred: {e}")
-
 def check_columns(df: pd.DataFrame, required_columns: list, file_name: str):
     """Check if required columns exist in the DataFrame."""
     for col in required_columns:
@@ -102,7 +105,7 @@ def cut_diffractogram(df: pd.DataFrame, qmin: float = 0, qmax: float = 1.5) -> O
 
     return cut_df
 
-@log_function_call
+# @log_function_call
 def isscatter(df: pd.DataFrame, intensitytheshhold: int = 20) -> Optional[bool]:
     """
     Checks if the file is actually a scattering file by finding whether the first peak is in a reasonable q range.
@@ -126,19 +129,27 @@ def isscatter(df: pd.DataFrame, intensitytheshhold: int = 20) -> Optional[bool]:
         return None
 
     # logging.info(f"Trying to check if the diffractogram has a peak between {qmin} and {qmax}")
-
-    id_max = df['I'].idxmax()
-    peak_q_value = df.loc[id_max, 'q']
-    
-    # if qmin < peak_q_value < qmax:
-    logging.info('Checking if intensity at larger q values is at ca. 10')
-    meanintensity=df.loc[(df.q > 2* peak_q_value)&(df.q < 5* peak_q_value)].I.mean()
-    if meanintensity < intensitytheshhold:
-        logging.info(f'The mean intensity of the diffractogram is {meanintensity:.0f}, and presumably not a diffraction file.')
+    try:
+        id_max = df['I'].idxmax()
+        peak_q_value = df.loc[id_max, 'q']
+        peaks=find_peaks(df.S, prominence=0.1)
+        # if qmin < peak_q_value < qmax:
+        logging.info('Checking if intensity at larger q values is at ca. 10')
+        meanintensity=df.loc[(df.q > 2* peak_q_value)&(df.q < 5* peak_q_value)].I.mean()
+        if meanintensity < intensitytheshhold:
+            logging.info(f'The mean intensity of the diffractogram is {meanintensity:.0f}, and presumably not a diffraction file.')
+            return False
+        elif peaks[0][0] != df.S.idxmax():
+            logging.info('Checking if 111 peak is largest')
+            
+            logging.info(f'The 111 peak was unexpectedly small.')
+            return False
+        else:
+            logging.info(f'The mean intensity of the diffractogram is {meanintensity:.0f}, and presumably a diffraction file.')
+            return True
+    except Exception as e:
+        logging.exception(f"An error occurred: {e}")
         return False
-    else:
-        logging.info(f'The mean intensity of the diffractogram is {meanintensity:.0f}, and presumably a diffraction file.')
-        return True
     # else:
     #     logging.info(f"The peak is not in the range between {qmin} and {qmax}. It's at q = {peak_q_value}.")
     #     return False

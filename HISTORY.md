@@ -1,4 +1,12 @@
 # History
+# 0.1.2 (2023-12-07)
+
+- added kwarg min_q111 for function fit_structurefactor()
+- added return of r_squared in fit_formfactor()
+- log filename changed to 'nanoscatterfit.log'
+- delete_log_file() doesnt remove the file anymore but just erases its content in order to prevent it from not being recreated in a running jupyter notebook file
+- function isscatter() now also checks if the 111 peak intensity is unexpectedly small
+
 
 # 0.1.1 (2023-11-25)
 
