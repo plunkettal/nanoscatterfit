@@ -65,6 +65,7 @@ def calc_structurefactor(sampledata: pd.DataFrame, suspdata: pd.DataFrame, norma
     if normalize==True:
         sampledata['S'] = normalize_area(sampledata['q'], sampledata['S'])
     return sampledata
+
 @log_function_call
 def baseline_als_optimized(y, lam, p, niter=50):
     ''''
